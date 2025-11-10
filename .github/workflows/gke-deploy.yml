@@ -49,9 +49,8 @@ jobs:
     # ARTIFACT_REGISTRY_REPO에서 리전 부분만 추출 (예: asia-northeast3)
     - name: Configure Docker for Artifact Registry
       run: |
-        gcloud auth configure-docker --quiet
-
-
+        HOST=$(echo ${{ secrets.ARTIFACT_REGISTRY_REPO }} | cut -d'/' -f1)
+        gcloud auth configure-docker $HOST --quiet
 
     # 6. (빌드) Dockerfile을 사용해 Spring Boot 앱 빌드
     - name: Build Docker image
