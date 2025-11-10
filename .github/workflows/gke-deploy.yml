@@ -45,6 +45,14 @@ jobs:
         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+    # 기존 docker auth 데이터 리셋
+    - name: Reset gcloud and Docker auth
+      run: |
+        rm -f ~/.docker/config.json || true
+        gcloud config configurations activate default || true
+        gcloud config unset auth/impersonate_service_account || true
+        gcloud config unset account || true
+
     # 5. (Docker 설정) gcloud CLI를 사용해 Artifact Registry에 Docker 인증
     # ARTIFACT_REGISTRY_REPO에서 리전 부분만 추출 (예: asia-northeast3)
     - name: Configure Docker for Artifact Registry
