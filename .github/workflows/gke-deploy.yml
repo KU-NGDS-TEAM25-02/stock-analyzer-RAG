@@ -38,14 +38,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 디버깅
-    - name: DEBUG - Check GSA Secret
-      run: | 
-        echo "Using GSA from Secret: ${{ secrets.GCP_SERVICE_ACCOUNT }}"
-
     # 4. (인증) WIF를 통해 Google Cloud에 인증
     - name: Authenticate to Google Cloud
-      uses: 'google-github-actions/auth@v2'
+      uses: 'google-github-actions/auth@v3'
       with:
         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -53,9 +48,7 @@ jobs:
     # 5. (Docker 설정) gcloud CLI를 사용해 Artifact Registry에 Docker 인증
     # ARTIFACT_REGISTRY_REPO에서 리전 부분만 추출 (예: asia-northeast3)
     - name: Configure Docker for Artifact Registry
-      run: |
-        HOST=$(echo ${{ secrets.ARTIFACT_REGISTRY_REPO }} | cut -d'/' -f1)
-        gcloud auth configure-docker $HOST --quiet
+      run: gcloud auth configure-docker ${{ secrets.ARTIFACT_REGISTRY_DOMAIN }}
 
     # 6. (빌드) Dockerfile을 사용해 Spring Boot 앱 빌드
     - name: Build Docker image
