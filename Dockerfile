@@ -20,7 +20,7 @@ RUN gradle bootJar
 
 # 2단계: 실제 실행을 위한 최소한의 JRE 이미지를 사용합니다 (Final Image)
 # (1단계와 동일한 Java 버전의 JRE를 사용)
-FROM openjdk:17-jre-slim
+FROM openjdk:17.0.2-slim-buster
 
 # 작업 디렉토리 설정
 WORKDIR /app
