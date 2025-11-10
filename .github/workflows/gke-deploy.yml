@@ -58,9 +58,7 @@ jobs:
 
     # 7. (푸시) 빌드된 이미지를 Artifact Registry로 푸시
     - name: Push Docker image
-      run:
-        gcloud auth login
-        docker push $IMAGE_PATH
+      run: docker push $IMAGE_PATH
 
   # -------------------------
   # CD: GKE에 배포
