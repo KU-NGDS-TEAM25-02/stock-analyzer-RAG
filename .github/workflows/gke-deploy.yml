@@ -50,10 +50,10 @@ jobs:
     - name: Configure Docker for Artifact Registry
       run: |
         HOST=$(echo ${{ secrets.ARTIFACT_REGISTRY_REPO }} | cut -d'/' -f1)
-        gcloud auth print-access-token \
-        --impersonate-service-account ${{ secrets.GCP_SERVICE_ACCOUNT }} | docker login \
-        -u oauth2accesstoken \
-        --password-stdin https://$HOST
+        gcloud auth print-access-token | docker login \
+          -u oauth2accesstoken \
+          --password-stdin https://$HOST
+
 
     # 6. (빌드) Dockerfile을 사용해 Spring Boot 앱 빌드
     - name: Build Docker image
