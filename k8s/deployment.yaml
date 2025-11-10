@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-analyzer-deployment # .yml 파일의 DEPLOYMENT_NAME과 일치해야 함
+spec:
+  selector:
+    matchLabels:
+      app: stock-analyzer
+  template:
+    metadata:
+      labels:
+        app: stock-analyzer
+    spec:
+      containers:
+        - name: stock-analyzer-container # .yml 파일의 CONTAINER_NAME과 일치해야 함
+          image: placeholder-image      # (최초 배포 시) AR의 이미지 주소
+          ports:
+            - containerPort: 8080         # (Spring Boot의 포트)
