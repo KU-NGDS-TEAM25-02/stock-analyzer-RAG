@@ -1,57 +1,69 @@
 name: CI/CD to GKE with Workload Identity Federation
 
+# 1. 트리거 조건: 'main' 브랜치에 코드가 푸시(push)될 때 실행
 on:
   push:
     branches: [ "main" ]
 
+# 2. 워크플로에서 사용할 환경 변수 정의
+# GitHub Secrets를 참조
 env:
+  # GCP 정보
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GKE_REGION }}
-  DEPLOYMENT_NAME: stock-analyzer-deployment
-  CONTAINER_NAME: stock-analyzer-container
+  
+  # GKE 배포 정보
+  DEPLOYMENT_NAME: stock-analyzer-deployment # GKE Deployment 이름
+  CONTAINER_NAME: stock-analyzer-container   # Deployment의 컨테이너 이름
+
+  # Artifact Registry (AR) 정보
+  # GITHUB_SHA는 현재 커밋의 고유 ID를 의미 (이미지 태그로 사용)
   IMAGE_PATH: ${{ secrets.ARTIFACT_REGISTRY_REPO }}/stock-analyzer:${{ github.sha }}
 
 jobs:
   # -------------------------
-  # CI: 빌드 및 이미지 푸시 (수정됨)
+  # CI: 빌드 및 이미지 푸시
   # -------------------------
   build-and-push:
     name: Build and Push to Artifact Registry
     runs-on: ubuntu-latest
+
+    # 3. (필수) WIF를 사용하려면 'id-token: write' 권한이 필요
     permissions:
       contents: 'read'
-      id-token: 'write' # (필수) WIF 인증용
+      id-token: 'write' # 👈 GitHub이 Google에 OIDC 토큰을 보낼 수 있게 허용
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      # 1. WIF 인증 + '순수 액세스 토큰' 출력
-      # 'id'를 부여하고 'token_format'을 추가
-      - name: Authenticate to Google Cloud
-        id: auth # 'steps.auth.outputs'로 참조하기 위해 ID 부여
-        uses: 'google-github-actions/auth@v2'
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          token_format: "access_token" # 👈 (핵심) JSON 파일 대신 순수 토큰 생성
+    # 디버깅
+    - name: DEBUG - Check GSA Secret
+      run: | 
+        echo "Using GSA from Secret: ${{ secrets.GCP_SERVICE_ACCOUNT }}"
 
-      # 2. gcloud 헬퍼 대신 docker/login-action으로 직접 로그인
-      - name: Login to Artifact Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ARTIFACT_REGISTRY_DOMAIN }} # 새로 추가한 Secret (예: asia-northeast3-docker.pkg.dev)
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }} # 1번 스텝에서 생성한 순수 토큰
+    # 4. (인증) WIF를 통해 Google Cloud에 인증
+    - name: Authenticate to Google Cloud
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      # 3. Docker 이미지 빌드
-      - name: Build Docker image
-        run: docker build -t $IMAGE_PATH .
+    # 5. (Docker 설정) gcloud CLI를 사용해 Artifact Registry에 Docker 인증
+    # ARTIFACT_REGISTRY_REPO에서 리전 부분만 추출 (예: asia-northeast3)
+    - name: Configure Docker for Artifact Registry
+      run: |
+        HOST=$(echo ${{ secrets.ARTIFACT_REGISTRY_REPO }} | cut -d'/' -f1)
+        gcloud auth configure-docker $HOST --quiet
 
-      # 4. Docker 이미지 푸시
-      - name: Push Docker image
-        run: docker push $IMAGE_PATH
+    # 6. (빌드) Dockerfile을 사용해 Spring Boot 앱 빌드
+    - name: Build Docker image
+      run: docker build -t $IMAGE_PATH .
+
+    # 7. (푸시) 빌드된 이미지를 Artifact Registry로 푸시
+    - name: Push Docker image
+      run: docker push $IMAGE_PATH
 
   # -------------------------
   # CD: GKE에 배포
@@ -59,30 +71,35 @@ jobs:
   deploy:
     name: Deploy to GKE
     runs-on: ubuntu-latest
+    # 'build-and-push' 잡이 성공해야만 실행됨
     needs: build-and-push
+
+    # (필수) WIF 인증 권한
     permissions:
       contents: 'read'
-      id-token: 'write' #(필수) WIF 인증용
+      id-token: 'write'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      # (참고) deploy 잡의 인증은 GKE(gcloud/kubectl)를 위한 것이므로
-      # 'token_format'이 필요 없으며, 기존 방식이 올바르게 작동합니다.
-      - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v2'
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    # 1. (인증) Google Cloud에 인증 (모든 'job'은 독립된 환경이므로 다시 인증)
+    - name: Authenticate to Google Cloud
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Get GKE cluster credentials
-        uses: 'google-github-actions/get-gke-credentials@v2'
-        with:
-          cluster_name: $GKE_CLUSTER
-          location: $GKE_REGION
+    # 2. (GKE 연결) gcloud CLI를 사용해 GKE 클러스터에 kubectl 연결
+    - name: Get GKE cluster credentials
+      uses: 'google-github-actions/get-gke-credentials@v2'
+      with:
+        cluster_name: $GKE_CLUSTER
+        location: $GKE_REGION
 
-      - name: Deploy to GKE
-        run: |
-          kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$IMAGE_PATH \
-            --record
+    # 3. (배포) GKE에 배포된 Deployment의 이미지를 새 이미지($IMAGE_PATH)로 교체
+    # 'kubectl set image'는 무중단 롤링 업데이트를 트리거합니다.
+    - name: Deploy to GKE
+      run: |
+        kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$IMAGE_PATH \
+          --record
