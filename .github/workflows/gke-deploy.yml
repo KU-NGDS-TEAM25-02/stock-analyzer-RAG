@@ -11,7 +11,6 @@ env:
 
   # Artifact Registry 정보
   IMAGE_PATH: ${{ secrets.ARTIFACT_REGISTRY_REPO }}/stock-analyzer:${{ github.sha }}
-  # 예: asia-northeast3-docker.pkg.dev/ku-ngds-ssa/ku-ngds-ssa-registry
 
 jobs:
 
@@ -41,7 +40,6 @@ jobs:
 
       # 2. Docker 로그인 (gcloud helper 사용하지 않음!)
       #    * registry domain 은 secret에 domain만 저장
-      #    예: asia-northeast3-docker.pkg.dev
       - name: Docker Login to Artifact Registry
         uses: docker/login-action@v3
         with:
